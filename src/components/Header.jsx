@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
 
 const navigation = [
-  { href: "#programs", label: "Направления" },
-  { href: "#process", label: "Как учим" },
-  { href: "#advantages", label: "Почему мы" },
-  { href: "#faq", label: "Вопросы" },
+  { to: "/#programs", label: "Направления" },
+  { to: "/#process", label: "Как учим" },
+  { to: "/#advantages", label: "Почему мы" },
+  { to: "/#faq", label: "Вопросы" },
+  { to: "/documents", label: "Документы" },
 ];
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const location = useLocation();
+  const isHome = location.pathname === "/";
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 24);
@@ -31,33 +35,47 @@ export default function Header() {
       <div className="topline">
         <span className="topline__dot" />
         Идёт набор в новые группы
-        <a href="#request">Узнать о старте</a>
+        <Link to="/#request">Узнать о старте</Link>
       </div>
 
-      <header className={`header${scrolled ? " header--scrolled" : ""}`}>
+      <header
+        className={`header${isHome ? "" : " header--document"}${
+          scrolled ? " header--scrolled" : ""
+        }`}
+      >
         <div className="container header__inner">
-          <a className="logo" href="#top" aria-label="СМЕНА — на главную">
+          <Link className="logo" to="/" aria-label="СМЕНА — на главную">
             <span className="logo__mark">С</span>
             <span>
               <strong>СМЕНА</strong>
               <small>центр подготовки</small>
             </span>
-          </a>
+          </Link>
 
           <nav
             className={`nav${menuOpen ? " nav--open" : ""}`}
             aria-label="Основная навигация"
           >
             {navigation.map((item) => (
-              <a key={item.href} href={item.href} onClick={closeMenu}>
+              <Link
+                key={item.to}
+                to={item.to}
+                aria-current={
+                  item.to === "/documents" &&
+                  location.pathname.startsWith("/documents")
+                    ? "page"
+                    : undefined
+                }
+                onClick={closeMenu}
+              >
                 {item.label}
-              </a>
+              </Link>
             ))}
           </nav>
 
-          <a className="button button--small header__cta" href="#request">
+          <Link className="button button--small header__cta" to="/#request">
             Подобрать программу
-          </a>
+          </Link>
 
           <button
             className="menu-button"

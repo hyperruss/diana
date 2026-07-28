@@ -1,25 +1,42 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowDown,
+  ArrowLeft,
+  ArrowRight,
   ArrowUpRight,
   BookOpenText,
   BriefcaseBusiness,
   ClipboardCheck,
+  Clock3,
   Coffee,
   Compass,
   ConciergeBell,
   GraduationCap,
   Martini,
   MessagesSquare,
+  Quote,
   Repeat2,
   Sparkles,
   Users,
 } from "lucide-react";
+import {
+  BrowserRouter,
+  Link,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
 import Header from "./components/Header.jsx";
 import FaqAccordion from "./components/FaqAccordion.jsx";
 import RequestForm from "./components/RequestForm.jsx";
 import Footer from "./components/Footer.jsx";
-import { advantages, learningSteps, programs } from "./data.js";
+import {
+  DocumentPage,
+  DocumentsIndexPage,
+  NotFoundPage,
+} from "./pages/DocumentsPage.jsx";
+import PaymentPage from "./pages/PaymentPage.jsx";
+import { advantages, learningSteps, programs, reviews } from "./data.js";
 import heroImage from "../assets/hero-hospitality-training.png";
 
 const programIcons = {
@@ -46,6 +63,13 @@ const revealDelay = (index) => {
   return "";
 };
 
+const formatPrice = (price) =>
+  new Intl.NumberFormat("ru-RU", {
+    style: "currency",
+    currency: "RUB",
+    maximumFractionDigits: 0,
+  }).format(price);
+
 function useRevealOnScroll() {
   useEffect(() => {
     const elements = document.querySelectorAll(".reveal");
@@ -70,6 +94,28 @@ function useRevealOnScroll() {
     elements.forEach((element) => observer.observe(element));
     return () => observer.disconnect();
   }, []);
+}
+
+function RouteScrollManager() {
+  const { pathname, hash } = useLocation();
+
+  useEffect(() => {
+    const scrollToRoute = () => {
+      if (hash) {
+        const target = document.querySelector(hash);
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+          return;
+        }
+      }
+      window.scrollTo({ top: 0, behavior: "auto" });
+    };
+
+    const frame = window.requestAnimationFrame(scrollToRoute);
+    return () => window.cancelAnimationFrame(frame);
+  }, [pathname, hash]);
+
+  return null;
 }
 
 function Hero() {
@@ -200,10 +246,37 @@ function Programs() {
                   <h3>{program.title}</h3>
                   <p>{program.description}</p>
                 </div>
-                <a href="#request">
-                  Узнать о программе
-                  <ArrowUpRight size={18} aria-hidden="true" />
-                </a>
+                <div className="program-card__facts">
+                  <span>
+                    <Clock3 size={15} aria-hidden="true" />
+                    {program.duration}
+                  </span>
+                  <span>{program.lessonLength}</span>
+                </div>
+                <div className="program-card__footer">
+                  <div className="program-card__price">
+                    <small>Стоимость</small>
+                    <strong>{formatPrice(program.price)}</strong>
+                  </div>
+                  {program.enrollmentClosed ? (
+                    <button
+                      className="program-card__pay program-card__pay--closed"
+                      type="button"
+                      disabled
+                      title="Набор на программу закрыт"
+                    >
+                      Набор закрыт
+                    </button>
+                  ) : (
+                    <Link
+                      className="program-card__pay"
+                      to={`/payment/${program.id}`}
+                    >
+                      Перейти к оплате
+                      <ArrowUpRight size={17} aria-hidden="true" />
+                    </Link>
+                  )}
+                </div>
               </article>
             );
           })}
@@ -298,33 +371,88 @@ function Advantages() {
   );
 }
 
-function Career() {
+function Reviews() {
+  const [activeReview, setActiveReview] = useState(0);
+  const review = reviews[activeReview];
+
+  const showReview = (index) => {
+    const nextIndex = (index + reviews.length) % reviews.length;
+    setActiveReview(nextIndex);
+  };
+
+  const handleKeyDown = (event) => {
+    if (event.key === "ArrowLeft") showReview(activeReview - 1);
+    if (event.key === "ArrowRight") showReview(activeReview + 1);
+  };
+
   return (
-    <section className="career">
-      <div className="container career__layout">
-        <div className="career__stamp reveal" aria-hidden="true">
-          <span>После обучения</span>
-          <strong>мы рядом</strong>
-          <span>После обучения</span>
-        </div>
-        <div className="career__content reveal reveal--delay">
-          <span className="section-index">05 / Карьерное сопровождение</span>
+    <section className="reviews section" id="reviews">
+      <div className="container reviews__layout">
+        <div className="reviews__intro reveal">
+          <span className="section-index">05 / Отзывы</span>
           <h2>
-            Помогаем сделать
+            Что говорят
             <br />
-            следующий шаг
+            участники
           </h2>
-          <p className="career__lead">
-            После успешного завершения программы специалисты центра
-            оказывают содействие в подборе подходящих вакансий
-            и консультируют по вопросам трудоустройства.
+          <p>
+            Впечатления после практики, общения с наставниками
+            и первых уверенных шагов в профессии.
           </p>
-          <div className="career__note">
-            <span aria-hidden="true">i</span>
-            <p>
-              Решение о найме всегда принимает работодатель.
-              Наша задача — помочь подготовиться и увереннее пройти этот путь.
-            </p>
+          <div className="reviews__controls">
+            <button
+              type="button"
+              aria-label="Предыдущий отзыв"
+              onClick={() => showReview(activeReview - 1)}
+            >
+              <ArrowLeft size={21} aria-hidden="true" />
+            </button>
+            <span>
+              {String(activeReview + 1).padStart(2, "0")} /{" "}
+              {String(reviews.length).padStart(2, "0")}
+            </span>
+            <button
+              type="button"
+              aria-label="Следующий отзыв"
+              onClick={() => showReview(activeReview + 1)}
+            >
+              <ArrowRight size={21} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        <div
+          className="reviews__slider reveal reveal--delay"
+          tabIndex="0"
+          role="region"
+          aria-label="Отзывы участников"
+          aria-live="polite"
+          onKeyDown={handleKeyDown}
+        >
+          <Quote className="reviews__quote-icon" size={54} strokeWidth={1.2} />
+          <div className="reviews__slide" key={activeReview}>
+            <blockquote>«{review.text}»</blockquote>
+            <div className="reviews__author">
+              <span className="reviews__avatar" aria-hidden="true">
+                {review.name.charAt(0)}
+              </span>
+              <div>
+                <strong>{review.name}</strong>
+                <span>{review.program}</span>
+              </div>
+            </div>
+          </div>
+          <div className="reviews__dots" aria-label="Выбрать отзыв">
+            {reviews.map((item, index) => (
+              <button
+                className={index === activeReview ? "is-active" : ""}
+                type="button"
+                aria-label={`Отзыв ${index + 1}: ${item.name}`}
+                aria-current={index === activeReview ? "true" : undefined}
+                onClick={() => showReview(index)}
+                key={item.name}
+              />
+            ))}
           </div>
         </div>
       </div>
@@ -385,26 +513,49 @@ function Request() {
   );
 }
 
-export default function App() {
+function HomePage() {
   useRevealOnScroll();
 
   return (
     <>
+      <Hero />
+      <Principles />
+      <Programs />
+      <Process />
+      <Advantages />
+      <Reviews />
+      <Faq />
+      <Request />
+    </>
+  );
+}
+
+function AppRoutes() {
+  return (
+    <>
+      <RouteScrollManager />
       <a className="skip-link" href="#main">
         Перейти к содержанию
       </a>
       <Header />
       <main id="main">
-        <Hero />
-        <Principles />
-        <Programs />
-        <Process />
-        <Advantages />
-        <Career />
-        <Faq />
-        <Request />
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/payment/:programId" element={<PaymentPage />} />
+          <Route path="/documents" element={<DocumentsIndexPage />} />
+          <Route path="/documents/:slug" element={<DocumentPage />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
       </main>
       <Footer />
     </>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppRoutes />
+    </BrowserRouter>
   );
 }
