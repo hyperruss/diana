@@ -1,0 +1,30 @@
+[Unit]
+Description=Smena Academy payment API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/smena-academy/current/server
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3000
+Environment=ORDER_DB_PATH=/var/lib/smena-academy/orders.sqlite
+Environment=PUBLIC_BASE_URL=https://smena-academy.ru
+Environment=NODE_EXTRA_CA_CERTS=/var/www/smena-academy/current/server/certificates/tbank-russian-trusted-ca-bundle.pem
+EnvironmentFile=-/etc/smena-academy.env
+ExecStart=/usr/bin/node index.js
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/smena-academy
+
+[Install]
+WantedBy=multi-user.target

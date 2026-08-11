@@ -5,8 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "dev:server": "node --watch server/index.js",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
+    "test:payments": "node --test server/*.test.js",
+    "check": "npm run test:payments && npm run build",
+    "configure:tbank": "powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/configure-tbank.ps1",
     "deploy": "powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/deploy.ps1"
   },
   "dependencies": {

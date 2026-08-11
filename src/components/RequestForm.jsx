@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowUpRight } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const programOptions = [
   "Бармен",
@@ -46,6 +47,20 @@ export default function RequestForm() {
           ))}
         </select>
       </label>
+      <label className="request-form__consent">
+        <input name="personalDataAccepted" type="checkbox" required />
+        <span>
+          Я даю{" "}
+          <Link to="/documents/personal-data" target="_blank" rel="noreferrer">
+            согласие на обработку персональных данных
+          </Link>{" "}
+          в соответствии с{" "}
+          <Link to="/documents/privacy" target="_blank" rel="noreferrer">
+            политикой конфиденциальности
+          </Link>
+          .
+        </span>
+      </label>
       <button
         className="button button--accent button--full"
         type="submit"
@@ -54,9 +69,6 @@ export default function RequestForm() {
         {submitted ? "Заявка отправлена" : "Отправить заявку"}
         {!submitted && <ArrowUpRight size={17} aria-hidden="true" />}
       </button>
-      <p className="request-form__legal">
-        Нажимая кнопку, вы соглашаетесь с обработкой персональных данных.
-      </p>
       {submitted && (
         <p className="request-form__success request-form__success--visible" role="status">
           Спасибо! Заявка принята — координатор свяжется с вами.
