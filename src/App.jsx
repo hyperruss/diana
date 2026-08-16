@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  ArrowDown,
   ArrowLeft,
   ArrowRight,
   ArrowUpRight,
@@ -37,7 +36,8 @@ import {
 } from "./pages/DocumentsPage.jsx";
 import PaymentPage, { PaymentResultPage } from "./pages/PaymentPage.jsx";
 import { advantages, learningSteps, programs, reviews } from "./data.js";
-import heroImage from "../assets/hero-hospitality-training.png";
+import heroImage from "../assets/hero-daylight-training.png";
+import heroMobileImage from "../assets/hero-daylight-training-mobile.png";
 
 const programIcons = {
   martini: Martini,
@@ -120,54 +120,47 @@ function RouteScrollManager() {
 
 function Hero() {
   return (
-    <section className="hero" id="top">
-      <div className="hero__media" aria-hidden="true">
-        <img src={heroImage} alt="" fetchPriority="high" />
+    <section className="hero hero--immersive" id="top">
+      <div className="immersive-hero__media" aria-hidden="true">
+        <picture>
+          <source media="(max-width: 620px)" srcSet={heroMobileImage} />
+          <img src={heroImage} alt="" fetchPriority="high" />
+        </picture>
       </div>
-      <div className="hero__scrim" />
+      <div className="immersive-hero__shade" aria-hidden="true" />
 
-      <div className="container hero__inner">
-        <div className="hero__content">
-          <div className="eyebrow eyebrow--light">
-            <span>Центр ресторанных профессий</span>
-            <span>Москва</span>
-          </div>
-          <h1>
-            Освой профессию,
-            <em>которая нужна</em>
-            индустрии
-          </h1>
-          <p className="hero__lead">
-            Практическая подготовка специалистов ресторанной сферы:
-            от первых навыков до уверенного старта в профессии.
-          </p>
-          <div className="hero__actions">
-            <a className="button button--accent" href="#request">
-              Подобрать направление
-              <ArrowUpRight size={17} aria-hidden="true" />
-            </a>
-            <a className="text-link text-link--light" href="#process">
-              Как проходит обучение
-              <ArrowDown size={16} aria-hidden="true" />
-            </a>
-          </div>
+      <div className="container immersive-hero__inner">
+        <div className="immersive-hero__brand" aria-label="СМЕНА — центр подготовки">
+          <span className="immersive-hero__mark">С</span>
+          <h1>СМЕНА</h1>
+          <p>Центр подготовки специалистов ресторанной индустрии</p>
         </div>
 
-        <div className="hero__aside">
-          <span className="hero__aside-number">01</span>
-          <p>Не только теория</p>
-          <strong>
-            Отрабатываем навыки в условиях, близких к реальной смене
-          </strong>
-        </div>
-      </div>
+        <div className="immersive-hero__bottom">
+          <div className="immersive-hero__intro">
+            <span>Москва · очное обучение</span>
+            <p>
+              Осваиваем профессию через практику — с наставником,
+              обратной связью и поддержкой после обучения.
+            </p>
+          </div>
 
-      <div className="container hero__professions" aria-label="Направления обучения">
-        {programs.map((program) => (
-          <a key={program.id} href={`#program-${program.id}`}>
-            {program.title}
-          </a>
-        ))}
+          <nav className="immersive-hero__directions" aria-label="Выбор направления">
+            <div className="immersive-hero__directions-label">
+              <span>Выберите направление</span>
+              <strong>С чего начнём?</strong>
+            </div>
+            <div className="immersive-hero__directions-list">
+              {programs.map((program, index) => (
+                <a key={program.id} href={`#program-${program.id}`}>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <strong>{program.title}</strong>
+                  <ArrowUpRight size={14} aria-hidden="true" />
+                </a>
+              ))}
+            </div>
+          </nav>
+        </div>
       </div>
     </section>
   );

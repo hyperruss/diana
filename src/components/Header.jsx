@@ -35,7 +35,7 @@ export default function Header() {
       <div className="topline">
         <span className="topline__dot" />
         Идёт набор в новые группы
-        <Link to="/#request">Узнать о старте</Link>
+        <Link to="/#programs">Смотреть направления</Link>
       </div>
 
       <header
@@ -73,8 +73,9 @@ export default function Header() {
             ))}
           </nav>
 
-          <Link className="button button--small header__cta" to="/#request">
-            Подобрать программу
+          <Link className="header__cta" to="/#programs">
+            Все программы
+            <span aria-hidden="true">↘</span>
           </Link>
 
           <button
