@@ -1,4 +1,10 @@
-import { ArrowLeft, ArrowRight, FileText } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Download,
+  ExternalLink,
+  FileText,
+} from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { documents, getDocumentBySlug } from "../documents.js";
 
@@ -12,17 +18,16 @@ export function DocumentsIndexPage() {
             <h1>Документы</h1>
           </div>
           <p>
-            Здесь собраны правила работы сайта и предварительные версии
-            документов, связанных с заявками, оплатой и персональными данными.
+            Здесь собраны документы, регулирующие оформление заявки, оплату,
+            обработку персональных данных и получение рекламных рассылок.
           </p>
         </div>
 
         <div className="documents-notice">
-          <strong>Черновые редакции</strong>
+          <strong>Документы центра</strong>
           <p>
-            Тексты подготовлены для прототипа. Перед запуском оплаты
-            и публикацией реквизитов документы необходимо проверить
-            и утвердить с юристом.
+            Оператор сайта — Индивидуальный предприниматель Григорьев Станислав
+            Антанович, ИНН 501723052937, ОГРНИП 326508100437513.
           </p>
         </div>
 
@@ -74,7 +79,7 @@ export function DocumentPage() {
 
         <header className="document-header">
           <div>
-            <span className="section-index">Документ / черновая редакция</span>
+            <span className="section-index">Документ / smena-academy.ru</span>
             <h1>{legalDocument.title}</h1>
           </div>
           <p>{legalDocument.description}</p>
@@ -88,8 +93,8 @@ export function DocumentPage() {
             </Link>
             <div className="document-status">
               <span>Статус</span>
-              <strong>Предварительная версия</strong>
-              <p>Обновлено: 28 июля 2026</p>
+              <strong>Опубликованная редакция</strong>
+              <p>Редакция: {legalDocument.updatedAt}</p>
             </div>
             <nav aria-label="Другие документы">
               <span>Другие документы</span>
@@ -104,18 +109,36 @@ export function DocumentPage() {
           </aside>
 
           <div className="document-content">
-            <div className="document-draft-note">
-              Этот текст является примерным и будет обновлён после утверждения
-              реквизитов, способов оплаты и окончательных условий программ.
+            <div className="document-file-actions">
+              <a
+                className="button button--dark"
+                href={legalDocument.pdfPath}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Открыть PDF
+                <ExternalLink size={17} aria-hidden="true" />
+              </a>
+              <a
+                className="text-link"
+                href={legalDocument.docxPath}
+                download
+              >
+                Скачать DOCX
+                <Download size={17} aria-hidden="true" />
+              </a>
             </div>
-            {legalDocument.sections.map((section) => (
-              <section key={section.heading}>
-                <h2>{section.heading}</h2>
-                {section.paragraphs.map((paragraph) => (
-                  <p key={paragraph}>{paragraph}</p>
-                ))}
-              </section>
-            ))}
+
+            <iframe
+              className="document-viewer"
+              src={`${legalDocument.pdfPath}#view=FitH`}
+              title={legalDocument.title}
+            />
+
+            <p className="document-viewer__fallback">
+              Если документ не отображается во встроенном просмотрщике, откройте
+              его в формате PDF или скачайте исходный файл DOCX по ссылкам выше.
+            </p>
           </div>
         </div>
       </div>

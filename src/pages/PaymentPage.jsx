@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -34,6 +34,46 @@ export default function PaymentPage() {
   const [form, setForm] = useState(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [installmentConfig, setInstallmentConfig] = useState(null);
+  const [installmentError, setInstallmentError] = useState("");
+  const [installmentTerm, setInstallmentTerm] = useState(6);
+  const [installmentSubmitting, setInstallmentSubmitting] = useState(false);
+  const formRef = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!program || program.enrollmentClosed) return undefined;
+
+    fetch(`/api/installments/config?programId=${encodeURIComponent(program.id)}`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(
+            payload.error || "Оплата в рассрочку временно недоступна.",
+          );
+        }
+        if (active) {
+          setInstallmentConfig(payload);
+          setInstallmentTerm(payload.promoOptions?.[0]?.term || 6);
+        }
+      })
+      .catch((requestError) => {
+        if (!active) return;
+        setInstallmentError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Оплата в рассрочку временно недоступна.",
+        );
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [program]);
 
   if (!program) return <NotFoundPage />;
 
@@ -106,6 +146,53 @@ export default function PaymentPage() {
     }
   };
 
+  const submitInstallment = async () => {
+    if (installmentSubmitting) return;
+    if (!formRef.current?.checkValidity()) {
+      formRef.current?.reportValidity();
+      setError(
+        "Для заявки на рассрочку заполните контакты и примите обязательные условия.",
+      );
+      return;
+    }
+
+    setInstallmentSubmitting(true);
+    setError("");
+    try {
+      const response = await fetch("/api/installments/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          programId: program.id,
+          installmentTerm,
+          name: form.name,
+          phone: form.phone,
+          email: form.email,
+          consents: {
+            offer: form.offerAccepted,
+            personalData: form.personalDataAccepted,
+            privacy: form.personalDataAccepted,
+            marketing: form.marketingAccepted,
+          },
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.applicationUrl) {
+        throw new Error(
+          payload.error || "Не удалось открыть заявку на рассрочку.",
+        );
+      }
+      window.location.assign(payload.applicationUrl);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Не удалось открыть заявку на рассрочку.",
+      );
+      setInstallmentSubmitting(false);
+    }
+  };
+
   return (
     <section className="payment-page">
       <div className="container">
@@ -121,12 +208,13 @@ export default function PaymentPage() {
           </div>
           <p>
             Заполните контактные данные и подтвердите согласие с документами.
-            После нажатия кнопки откроется защищённая платёжная страница Т‑Банка.
+            Выберите оплату картой или подайте отдельную заявку на рассрочку
+            через защищённую форму Т‑Банка.
           </p>
         </header>
 
         <div className="payment-layout">
-          <form className="payment-form" onSubmit={submitPayment}>
+          <form ref={formRef} className="payment-form" onSubmit={submitPayment}>
             <div className="payment-form__heading">
               <span>01 / Данные плательщика</span>
               <h2>Контактные данные</h2>
@@ -237,24 +325,99 @@ export default function PaymentPage() {
                   onChange={updateForm}
                 />
                 <span>
-                  Я согласен получать новости и предложения центра. Это
-                  необязательно для оплаты.
+                  Я даю{" "}
+                  <Link
+                    to="/documents/marketing-consent"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    согласие на получение рекламных рассылок
+                  </Link>
+                  . Это необязательно для оплаты.
                 </span>
               </label>
             </fieldset>
 
-            <button
-              className="button button--accent button--full payment-form__submit"
-              type="submit"
-              disabled={submitting}
-            >
-              {submitting ? "Создаём платёж…" : `Оплатить ${formatPrice(program.price)}`}
-              {submitting ? (
-                <LoaderCircle className="payment-spinner" size={18} aria-hidden="true" />
+            <div className="payment-methods">
+              <span className="payment-methods__label">03 / Способ оплаты</span>
+
+              <button
+                className="button button--accent button--full payment-form__submit"
+                type="submit"
+                disabled={submitting}
+              >
+                {submitting ? "Создаём платёж…" : "Оплатить картой"}
+                {submitting ? (
+                  <LoaderCircle className="payment-spinner" size={18} aria-hidden="true" />
+                ) : (
+                  <ArrowRight size={18} aria-hidden="true" />
+                )}
+              </button>
+
+              <div className="payment-methods__divider" aria-hidden="true">
+                <span>или</span>
+              </div>
+
+              {installmentConfig ? (
+                <div className="payment-installment">
+                  <label className="payment-installment__term">
+                    <span>Срок рассрочки</span>
+                    <select
+                      value={installmentTerm}
+                      onChange={(event) =>
+                        setInstallmentTerm(Number(event.target.value))
+                      }
+                    >
+                      {installmentConfig.promoOptions.map((option) => (
+                        <option value={option.term} key={option.term}>
+                          {option.text}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    className="button button--full payment-form__installment"
+                    type="button"
+                    disabled={installmentSubmitting || !installmentConfig.available}
+                    onClick={submitInstallment}
+                  >
+                    {installmentSubmitting
+                      ? "Создаём заявку…"
+                      : "Оплатить в рассрочку"}
+                    {installmentSubmitting ? (
+                      <LoaderCircle
+                        className="payment-spinner"
+                        size={18}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <ArrowRight size={18} aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
               ) : (
-                <ArrowRight size={18} aria-hidden="true" />
+                <button
+                  className="button button--full payment-form__installment-placeholder"
+                  type="button"
+                  disabled
+                >
+                  Оплатить в рассрочку
+                </button>
               )}
-            </button>
+
+              <p className="payment-methods__note">
+                Рассрочка оформляется отдельной заявкой. Условия и решение по
+                заявке определяет Т‑Банк.
+              </p>
+              {installmentConfig && !installmentConfig.available && (
+                <p className="payment-methods__unavailable">
+                  Оформление рассрочки пока недоступно.
+                </p>
+              )}
+              {installmentError && (
+                <p className="payment-methods__unavailable">{installmentError}</p>
+              )}
+            </div>
 
             {error && (
               <div className="payment-form__status payment-form__status--error" role="alert">
@@ -313,7 +476,7 @@ const failedStatuses = new Set([
   "ATTEMPTS_EXPIRED",
 ]);
 
-export function PaymentResultPage() {
+function PaymentStatusResult({ installment = false }) {
   const [searchParams] = useSearchParams();
   const orderId = searchParams.get("orderId") || "";
   const [payment, setPayment] = useState(null);
@@ -327,7 +490,7 @@ export function PaymentResultPage() {
     const checkStatus = async () => {
       try {
         const response = await fetch(
-          `/api/payments/status?orderId=${encodeURIComponent(orderId)}`,
+          `${installment ? "/api/installments/status" : "/api/payments/status"}?orderId=${encodeURIComponent(orderId)}`,
           { headers: { Accept: "application/json" }, cache: "no-store" },
         );
         const payload = await response.json().catch(() => ({}));
@@ -339,14 +502,16 @@ export function PaymentResultPage() {
         attempts += 1;
 
         if (!payload.terminal && attempts < 48) {
-          timeoutId = window.setTimeout(checkStatus, 2500);
+          timeoutId = window.setTimeout(checkStatus, installment ? 10_000 : 2500);
         }
       } catch (requestError) {
         if (!active) return;
         setError(
           requestError instanceof Error
             ? requestError.message
-            : "Не удалось проверить платёж.",
+            : installment
+              ? "Не удалось проверить заявку на рассрочку."
+              : "Не удалось проверить платёж.",
         );
       }
     };
@@ -358,7 +523,7 @@ export function PaymentResultPage() {
       active = false;
       window.clearTimeout(timeoutId);
     };
-  }, [orderId]);
+  }, [installment, orderId]);
 
   const isConfirmed = payment?.status === "CONFIRMED";
   const isFailed = payment && failedStatuses.has(payment.status);
@@ -366,23 +531,30 @@ export function PaymentResultPage() {
   return (
     <section className="payment-page payment-result-page">
       <div className="container payment-result">
-        <span className="section-index">Статус оплаты</span>
+        <span className="section-index">
+          {installment ? "Статус рассрочки" : "Статус оплаты"}
+        </span>
 
         {!payment && !error && (
           <>
             <LoaderCircle className="payment-spinner payment-result__icon" aria-hidden="true" />
-            <h1>Проверяем платёж</h1>
-            <p>Ожидаем подтверждение от банка. Обычно это занимает несколько секунд.</p>
+            <h1>{installment ? "Проверяем заявку" : "Проверяем платёж"}</h1>
+            <p>
+              {installment
+                ? "Получаем актуальный статус заявки у Т‑Банка."
+                : "Ожидаем подтверждение от банка. Обычно это занимает несколько секунд."}
+            </p>
           </>
         )}
 
         {isConfirmed && (
           <>
             <CheckCircle2 className="payment-result__icon" aria-hidden="true" />
-            <h1>Оплата подтверждена</h1>
+            <h1>{installment ? "Рассрочка оформлена" : "Оплата подтверждена"}</h1>
             <p>
-              Заказ на программу «{payment.programTitle}» оплачен. Мы свяжемся с
-              вами по указанным при оформлении контактам.
+              {installment
+                ? `Банк подтвердил рассрочку на программу «${payment.programTitle}». Электронный чек поставлен в очередь АТОЛ.`
+                : `Заказ на программу «${payment.programTitle}» оплачен. Мы свяжемся с вами по указанным при оформлении контактам.`}
             </p>
           </>
         )}
@@ -390,10 +562,13 @@ export function PaymentResultPage() {
         {payment && !isConfirmed && !isFailed && (
           <>
             <LoaderCircle className="payment-spinner payment-result__icon" aria-hidden="true" />
-            <h1>Ждём подтверждение</h1>
+            <h1>
+              {installment ? "Ждём оформления рассрочки" : "Ждём подтверждение"}
+            </h1>
             <p>
-              Банк ещё обрабатывает платёж. Не закрывайте страницу — статус
-              обновится автоматически.
+              {installment
+                ? "Заявка ещё не подписана или ожидает подтверждения выдачи. Статус обновится автоматически."
+                : "Банк ещё обрабатывает платёж. Не закрывайте страницу — статус обновится автоматически."}
             </p>
           </>
         )}
@@ -401,8 +576,15 @@ export function PaymentResultPage() {
         {(isFailed || error) && (
           <>
             <XCircle className="payment-result__icon" aria-hidden="true" />
-            <h1>Оплата не подтверждена</h1>
-            <p>{error || "Банк не подтвердил операцию. Деньги за этот заказ не считаются полученными."}</p>
+            <h1>
+              {installment ? "Рассрочка не оформлена" : "Оплата не подтверждена"}
+            </h1>
+            <p>
+              {error ||
+                (installment
+                  ? "Банк не подтвердил выдачу рассрочки. Чек по этой заявке не формируется."
+                  : "Банк не подтвердил операцию. Деньги за этот заказ не считаются полученными.")}
+            </p>
           </>
         )}
 
@@ -433,4 +615,12 @@ export function PaymentResultPage() {
       </div>
     </section>
   );
+}
+
+export function PaymentResultPage() {
+  return <PaymentStatusResult />;
+}
+
+export function InstallmentResultPage() {
+  return <PaymentStatusResult installment />;
 }

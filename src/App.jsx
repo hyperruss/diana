@@ -34,7 +34,10 @@ import {
   DocumentsIndexPage,
   NotFoundPage,
 } from "./pages/DocumentsPage.jsx";
-import PaymentPage, { PaymentResultPage } from "./pages/PaymentPage.jsx";
+import PaymentPage, {
+  InstallmentResultPage,
+  PaymentResultPage,
+} from "./pages/PaymentPage.jsx";
 import { advantages, learningSteps, programs, reviews } from "./data.js";
 import heroImage from "../assets/hero-daylight-training.png";
 import heroMobileImage from "../assets/hero-daylight-training-mobile.png";
@@ -535,6 +538,10 @@ function AppRoutes() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/payment/result" element={<PaymentResultPage />} />
+          <Route
+            path="/payment/installment-result"
+            element={<InstallmentResultPage />}
+          />
           <Route path="/payment/:programId" element={<PaymentPage />} />
           <Route path="/documents" element={<DocumentsIndexPage />} />
           <Route path="/documents/:slug" element={<DocumentPage />} />

@@ -41,9 +41,15 @@ export default function Footer() {
             Практическая подготовка специалистов ресторанной индустрии.
           </p>
           <div className="footer__contacts">
-            <strong>+7 (000) 000-00-00</strong>
-            <span>hello@smena.center</span>
-            <span>Москва · адрес уточняется</span>
+            <strong>ИП Григорьев Станислав Антанович</strong>
+            <span>ИНН 501723052937 · ОГРНИП 326508100437513</span>
+            <a href="mailto:grgrv.stnslv@gmail.com">
+              grgrv.stnslv@gmail.com
+            </a>
+            <span>
+              143581, Московская область, г. Истра, с. Павловская Слобода,
+              ул. Стадион, д. 4, кв. 52
+            </span>
           </div>
         </div>
 
@@ -71,8 +77,8 @@ export default function Footer() {
       </div>
 
       <div className="container footer__bottom">
-        <span>© 2026 СМЕНА</span>
-        <span>Информация и реквизиты на сайте являются предварительными</span>
+        <span>© 2026 СМЕНА · smena-academy.ru</span>
+        <span>ИП Григорьев С. А. · ИНН 501723052937</span>
         <Link to="/documents/privacy">Политика конфиденциальности</Link>
       </div>
     </footer>

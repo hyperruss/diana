@@ -2,8 +2,16 @@ import http from "node:http";
 import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { findPaymentProgram } from "./catalog.js";
-import { assertTbankConfigured, readConfig } from "./config.js";
+import {
+  assertTbankConfigured,
+  isAtolConfigured,
+  isInstallmentsConfigured,
+  readConfig,
+} from "./config.js";
 import { createOrderStore } from "./order-store.js";
+import { createReceiptService } from "./receipt-service.js";
+import { createInstallmentService } from "./installment-service.js";
+import { isTbankInstallmentWebhookIp } from "./installments.js";
 import {
   initializeTbankPayment,
   verifyTbankToken,
@@ -112,7 +120,7 @@ function createOrderId() {
   return `smena-${Date.now().toString(36)}-${randomBytes(12).toString("hex")}`;
 }
 
-function publicOrder(order) {
+function publicOrder(order, receipt = null) {
   return {
     orderId: order.order_id,
     programId: order.program_id,
@@ -121,6 +129,8 @@ function publicOrder(order) {
     currency: order.currency,
     status: order.status,
     confirmed: order.status === "CONFIRMED",
+    receiptStatus: receipt?.status || null,
+    receiptUrl: receipt?.receipt_url || null,
     terminal: [
       "CONFIRMED",
       "CANCELED",
@@ -138,18 +148,212 @@ export function createPaymentServer(options = {}) {
   const config = options.config ?? readConfig();
   const store = options.store ?? createOrderStore(config.orderDbPath);
   const initializePayment = options.initializePayment ?? initializeTbankPayment;
+  const receiptService =
+    options.receiptService ?? createReceiptService({ config, store });
+  const installmentService =
+    options.installmentService ??
+    createInstallmentService({ config, store, receiptService });
   const allowInit = createRateLimiter();
+
+  receiptService.start?.();
+  installmentService.start?.();
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
     try {
+      if (
+        req.method === "GET" &&
+        url.pathname === "/api/installments/config"
+      ) {
+        const program = findPaymentProgram(
+          url.searchParams.get("programId") || "",
+        );
+        if (!program) {
+          json(res, 404, { error: "Программа не найдена." });
+          return;
+        }
+        if (program.enrollmentClosed) {
+          json(res, 409, { error: "Набор на эту программу закрыт." });
+          return;
+        }
+        if (
+          !config.installments.shopId ||
+          !config.installments.showcaseId ||
+          !config.installments.promoOptions.length ||
+          !receiptService.configured
+        ) {
+          json(res, 503, { error: "Оплата в рассрочку временно недоступна." });
+          return;
+        }
+
+        json(res, 200, {
+          available: installmentService.configured,
+          promoOptions: config.installments.promoOptions.map(({ text, term }) => ({
+            text,
+            term,
+          })),
+          itemName: `Обучение по программе «${program.title}»`,
+          amount: program.amount / 100,
+        });
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/installments/init") {
+        if (!allowInit(`installment:${clientIp(req)}`)) {
+          json(res, 429, { error: "Слишком много попыток. Попробуйте позже." });
+          return;
+        }
+        if (!installmentService.configured || !receiptService.configured) {
+          json(res, 503, {
+            error: "Оплата в рассрочку временно недоступна.",
+          });
+          return;
+        }
+
+        const rawInput = parseBody(req, await readBody(req));
+        const input = validatePaymentInput(rawInput);
+        if (!input.valid) {
+          json(res, 400, { error: input.message });
+          return;
+        }
+        const term = Number(rawInput.installmentTerm);
+        const promo = config.installments.promoOptions.find(
+          (option) => option.term === term,
+        );
+        if (!promo) {
+          json(res, 400, { error: "Выберите доступный срок рассрочки." });
+          return;
+        }
+
+        const program = findPaymentProgram(input.value.programId);
+        if (!program) {
+          json(res, 404, { error: "Программа не найдена." });
+          return;
+        }
+        if (program.enrollmentClosed) {
+          json(res, 409, { error: "Набор на эту программу закрыт." });
+          return;
+        }
+
+        const order = {
+          orderId: createOrderId(),
+          programId: program.id,
+          programTitle: program.title,
+          amount: program.amount,
+          customer: input.value,
+          consents: input.value.consents,
+        };
+        store.createInstallment(order, {
+          promoCode: promo.value,
+          term: promo.term,
+        });
+
+        try {
+          const application = await installmentService.createApplication({
+            order,
+            program,
+            customer: input.value,
+            promoCode: promo.value,
+          });
+          store.markInstallmentInitialized(order.orderId, application);
+          json(res, 201, {
+            orderId: order.orderId,
+            applicationUrl: application.applicationUrl,
+          });
+        } catch (error) {
+          store.markInstallmentInitFailed(order.orderId, error.httpStatus);
+          console.error("Installment application initialization failed", {
+            orderId: order.orderId,
+            error: error.name,
+            httpStatus: error.httpStatus || null,
+          });
+          json(res, 502, {
+            error: "Т‑Банк не смог создать заявку на рассрочку. Попробуйте позже.",
+          });
+        }
+        return;
+      }
+
+      if (
+        req.method === "POST" &&
+        url.pathname === "/api/installments/notification"
+      ) {
+        const sourceIp = String(req.headers["x-real-ip"] || "").trim();
+        if (!isTbankInstallmentWebhookIp(sourceIp)) {
+          text(res, 403, "Invalid source");
+          return;
+        }
+        if (!installmentService.configured || !receiptService.configured) {
+          text(res, 503, "Service unavailable");
+          return;
+        }
+        const notification = parseBody(req, await readBody(req));
+        const orderId =
+          typeof notification.id === "string" ? notification.id : "";
+        if (!/^smena-[a-z0-9-]{10,45}$/.test(orderId)) {
+          text(res, 400, "Invalid order");
+          return;
+        }
+        if (!store.getInstallmentOrder(orderId)) {
+          text(res, 404, "Unknown order");
+          return;
+        }
+
+        await installmentService.syncOrder(orderId);
+        text(res, 200, "OK");
+        return;
+      }
+
+      if (
+        req.method === "GET" &&
+        url.pathname === "/api/installments/status"
+      ) {
+        const orderId = url.searchParams.get("orderId") || "";
+        if (!/^smena-[a-z0-9-]{10,45}$/.test(orderId)) {
+          json(res, 400, { error: "Некорректный номер заказа." });
+          return;
+        }
+        let order = store.getInstallmentOrder(orderId);
+        if (!order) {
+          json(res, 404, { error: "Заявка не найдена." });
+          return;
+        }
+
+        const lastCheck = Date.parse(order.last_info_check_at || "");
+        const shouldRefresh =
+          installmentService.configured &&
+          order.status !== "CONFIRMED" &&
+          !["CANCELED", "REJECTED", "INIT_FAILED"].includes(order.status) &&
+          (!Number.isFinite(lastCheck) || Date.now() - lastCheck >= 10_000);
+        if (shouldRefresh) {
+          try {
+            order = await installmentService.syncOrder(orderId);
+          } catch (error) {
+            console.error("Installment result status refresh failed", {
+              orderId,
+              error: error.name,
+              httpStatus: error.httpStatus || null,
+            });
+          }
+        }
+
+        json(
+          res,
+          200,
+          publicOrder(order, store.getFiscalReceipt?.(orderId)),
+        );
+        return;
+      }
+
       if (req.method === "GET" && url.pathname === "/api/health") {
         json(res, 200, {
           ok: true,
           acquiringConfigured: Boolean(
             config.tbank.terminalKey && config.tbank.password,
           ),
+          receiptsConfigured: isAtolConfigured(config),
+          installmentsConfigured: isInstallmentsConfigured(config),
         });
         return;
       }
@@ -157,6 +361,11 @@ export function createPaymentServer(options = {}) {
       if (req.method === "POST" && url.pathname === "/api/payments/init") {
         if (!allowInit(clientIp(req))) {
           json(res, 429, { error: "Слишком много попыток. Попробуйте позже." });
+          return;
+        }
+
+        if (!receiptService.configured) {
+          json(res, 503, { error: "Приём платежей временно недоступен." });
           return;
         }
 
@@ -255,7 +464,15 @@ export function createPaymentServer(options = {}) {
         }
 
         try {
-          store.applyNotification({ orderId, paymentId, amount, status });
+          const updatedOrder = store.applyNotification({
+            orderId,
+            paymentId,
+            amount,
+            status,
+          });
+          if (status === "CONFIRMED" && updatedOrder.status === "CONFIRMED") {
+            receiptService.queueSale(updatedOrder);
+          }
         } catch (error) {
           if (error.code === "UNKNOWN_ORDER") {
             text(res, 404, "Unknown order");
@@ -287,7 +504,11 @@ export function createPaymentServer(options = {}) {
           json(res, 404, { error: "Заказ не найден." });
           return;
         }
-        json(res, 200, publicOrder(order));
+        json(
+          res,
+          200,
+          publicOrder(order, store.getFiscalReceipt?.(orderId)),
+        );
         return;
       }
 
@@ -317,7 +538,11 @@ export function createPaymentServer(options = {}) {
     }
   });
 
-  server.on("close", () => store.close?.());
+  server.on("close", () => {
+    installmentService.stop?.();
+    receiptService.stop?.();
+    store.close?.();
+  });
   return server;
 }
 

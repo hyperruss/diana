@@ -1,5 +1,5 @@
 param(
-  [string]$ServerAddress = "194.67.103.218",
+  [string]$ServerAddress = "91.197.96.7",
   [string]$ServerUser = "root",
   [string]$Domain = "smena-academy.ru",
   [string]$ProjectName = "smena-academy",
@@ -68,9 +68,17 @@ try {
 set -eu
 TEMP_FILE=$(mktemp /tmp/__PROJECT__-env.XXXXXX)
 trap 'rm -f "$TEMP_FILE"' EXIT
-base64 -d > "$TEMP_FILE"
+tr -d '\r' | base64 -d > "$TEMP_FILE"
 test -s "$TEMP_FILE"
-install -o root -g root -m 600 "$TEMP_FILE" /etc/__PROJECT__.env
+CURRENT_FILE=/etc/__PROJECT__.env
+MERGED_FILE=$(mktemp /tmp/__PROJECT__-env-merged.XXXXXX)
+trap 'rm -f "$TEMP_FILE" "$MERGED_FILE"' EXIT
+if [ -f "$CURRENT_FILE" ]; then
+  grep -Ev '^(TBANK_TERMINAL_KEY|TBANK_PASSWORD|PUBLIC_BASE_URL)=' "$CURRENT_FILE" \
+    > "$MERGED_FILE" || true
+fi
+cat "$TEMP_FILE" >> "$MERGED_FILE"
+install -o root -g root -m 600 "$MERGED_FILE" "$CURRENT_FILE"
 if systemctl list-unit-files '__PROJECT__.service' --no-legend 2>/dev/null | grep -q '__PROJECT__.service'; then
   systemctl restart '__PROJECT__.service'
   systemctl is-active --quiet '__PROJECT__.service'

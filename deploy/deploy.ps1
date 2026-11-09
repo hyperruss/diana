@@ -1,5 +1,5 @@
 param(
-  [string]$ServerAddress = "194.67.103.218",
+  [string]$ServerAddress = "91.197.96.7",
   [string]$ServerUser = "root",
   [string]$Domain = "smena-academy.ru",
   [string]$ProjectName = "smena-academy",
@@ -92,7 +92,7 @@ NGINX_LINK="/etc/nginx/sites-enabled/$PROJECT.conf"
 SERVICE_FILE="/etc/systemd/system/$PROJECT.service"
 NGINX_BACKUP="/tmp/$PROJECT-nginx-backup-__RELEASE_ID__.conf"
 SERVICE_BACKUP="/tmp/$PROJECT-service-backup-__RELEASE_ID__.service"
-PREVIOUS=$(readlink -f "$CURRENT" 2>/dev/null || true)
+PREVIOUS=$(readlink -e "$CURRENT" 2>/dev/null || true)
 HAD_NGINX=0
 HAD_SERVICE=0
 ACTIVATED=0
@@ -103,6 +103,8 @@ rollback() {
     echo 'Deployment check failed. Rolling back...' >&2
     if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ]; then
       ln -sfn "$PREVIOUS" "$CURRENT"
+    else
+      rm -f "$CURRENT"
     fi
     if [ "$HAD_NGINX" -eq 1 ]; then
       install -o root -g root -m 644 "$NGINX_BACKUP" "$NGINX_CONFIG"
@@ -185,9 +187,29 @@ if [ "$API_READY" -ne 1 ]; then
   exit 1
 fi
 echo 'Checking frontend through Nginx...'
-curl --noproxy '*' --fail --silent --show-error --max-time 20 \
+FRONTEND_CHECK="/tmp/$PROJECT-frontend-check-__RELEASE_ID__.html"
+FRONTEND_STATUS=$(curl --noproxy '*' --silent --show-error --max-time 20 \
+  --output "$FRONTEND_CHECK" --write-out '%{http_code}' \
   --resolve "$DOMAIN:443:127.0.0.1" \
-  "https://$DOMAIN/documents" | grep -Fq '<div id="root"></div>'
+  "https://$DOMAIN/documents" || true)
+if [ "$FRONTEND_STATUS" != '200' ] || \
+  ! grep -Fq '<div id="root"></div>' "$FRONTEND_CHECK"; then
+  printf 'Frontend check failed: HTTP %s. Response preview:\n' "$FRONTEND_STATUS" >&2
+  head -c 500 "$FRONTEND_CHECK" >&2 || true
+  printf '\n' >&2
+  exit 1
+fi
+rm -f "$FRONTEND_CHECK"
+
+echo 'Checking published legal documents...'
+LEGAL_STATUS=$(curl --noproxy '*' --silent --show-error --max-time 20 \
+  --output /dev/null --write-out '%{http_code}' \
+  --resolve "$DOMAIN:443:127.0.0.1" \
+  "https://$DOMAIN/legal-files/privacy-policy.pdf" || true)
+if [ "$LEGAL_STATUS" != '200' ]; then
+  printf 'Legal document check failed: HTTP %s.\n' "$LEGAL_STATUS" >&2
+  exit 1
+fi
 echo 'Checking payment API through Nginx...'
 curl --noproxy '*' --fail --silent --show-error --max-time 20 \
   --resolve "$DOMAIN:443:127.0.0.1" \

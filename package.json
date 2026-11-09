@@ -11,6 +11,8 @@
     "test:payments": "node --test server/*.test.js",
     "check": "npm run test:payments && npm run build",
     "configure:tbank": "powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/configure-tbank.ps1",
+    "configure:installments": "powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/configure-installments.ps1",
+    "configure:atol": "powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/configure-atol.ps1",
     "deploy": "powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/deploy.ps1"
   },
   "dependencies": {
